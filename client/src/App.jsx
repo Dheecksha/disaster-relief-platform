@@ -11,9 +11,10 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
-const BACKEND_URL = '';
-const socket = io();
-
+const BACKEND_URL = 'https://disaster-relief-platform-s3xo.onrender.com';
+const socket = io(BACKEND_URL, {
+  transports: ["websocket", "polling"]
+});
 export default function App() {
   const [activeTab, setActiveTab] = useState('citizen');
   const [beacons, setBeacons] = useState([]);
@@ -88,29 +89,31 @@ export default function App() {
   };
 
   const handleBeaconSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.latitude || !form.longitude) {
-      alert('Please click "Capture GPS Coordinates" before sending the beacon.');
-      return;
-    }
-    try {
-      const res = await axios.post(`${BACKEND_URL}/api/beacon`, form);
-      setSubmitMessage(res.data.message);
-      setForm({
-        citizenName: '',
-        phone: '',
-        needType: 'Rescue',
-        urgency: 'Critical',
-        peopleCount: 1,
-        latitude: '',
-        longitude: '',
-        address: '',
-      });
-      refreshData();
-    } catch (err) {
-      alert('Failed to transmit distress signal: ' + (err.response?.data?.error || err.message));
-    }
+  e.preventDefault();
+
+  // 1. Ensure fallback coordinates if browser GPS is blocked
+  const lat = form.latitude || 13.0827; // Default Chennai Lat
+  const lng = form.longitude || 80.2707; // Default Chennai Lng
+
+  const payload = {
+    ...form,
+    latitude: lat,
+    longitude: lng
   };
+
+  try {
+    const res = await axios.post(`${BACKEND_URL}/api/beacon`, payload);
+    alert("Beacon Sent Successfully!");
+    
+    // Emit real-time event to socket
+    if (socket) {
+      socket.emit("send_beacon", res.data);
+    }
+  } catch (err) {
+    console.error("Beacon transmission error:", err);
+    alert(`Failed to send beacon: ${err.response?.data?.message || err.message}`);
+  }
+};
 
   const claimTask = async (id) => {
     const volunteerId = prompt('Enter your Volunteer / NGO unit name:');
